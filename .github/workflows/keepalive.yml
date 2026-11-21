@@ -1,0 +1,41 @@
+name: Supabase keepalive
+
+on:
+  schedule:
+    # Daily at 03:17 UTC. Supabase's docs say a few database requests each
+    # day over the previous week are typically needed to avoid a free-project
+    # pause, so the 5-day idea was too sparse.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ping Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST "$SUPABASE_URL/rest/v1/rpc/ping" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+
+      - name: Keep the scheduled workflow active
+        if: github.event_name == 'schedule'
+        run: |
+          if [ "$(date -u +%d)" = "01" ]; then
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > .keepalive
+            git config user.name "keepalive-bot"
+            git config user.email "keepalive@users.noreply.github.com"
+            git add .keepalive
+            git commit -m "Monthly keepalive marker" || true
+            git push
+          fi
